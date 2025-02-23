@@ -34,17 +34,30 @@ from EquiNet import *
 # print(len(val.weightMatrix))
 # print(val.weightMatrix)
 
-layer1 = PermutationClosedLayer(5,10,None,False,2)
-layer2 = PermutationClosedLayer(10,15,layer1,False,2)
-layer3 = PermutationClosedLayer(15,5,layer2,False,2)
+
+
+layer1 = PermutationClosedLayer(20,40,None,False,2)
+layer2 = PermutationClosedLayer(40,80,layer1,False,2)
+layer3 = PermutationClosedLayer(80,20,layer2,False,2)
 seq = nn.Sequential(layer1,layer2,layer3)
-print(layer1.weights)
-print(layer2.running_weight_matrix)
+check1 = layer1.weights.detach().numpy()
+check2 = layer2.weights.detach().numpy()
+check4 = layer3.running_weight_matrix.detach().numpy()
+check3 = layer3.weights.detach().numpy()
+check6 = layer2.running_weight_matrix.detach().numpy()
+print(layer2.weights)
+print(layer3.weights)
 seq.eval()
 with torch.no_grad():
-    val = seq(torch.tensor([1.,2.,3.,4.,5.]))
+    vec = torch.randn(20)
+    print(vec)
+    vec[0] = 1
+    vec[1] = -2
+    val = seq(vec)
     print(val)
-    val2 = seq(torch.tensor([1.,2.,3.,5.,4.]))
+    vec[0] = -2
+    vec[1] = 1
+    val2 = seq(vec)
     print(val2)
 
 # pcs = PermutationClosedStructureInverse(A)
@@ -60,7 +73,7 @@ with torch.no_grad():
 
 # layer1 = PermutationClosedLayer(5,10,None,False,2)
 # layer2 = PermutationClosedLayer(10,5,layer1,False,2)
-# seq = nn.Sequential(layer1,nn.ReLU(),layer2)
+# seq = nn.Sequential(layer1,layer2)
 # seq.eval()
 # with torch.no_grad():
 #     val = seq(torch.tensor([1.,2.,3.,4.,5.]))
