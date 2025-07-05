@@ -3,9 +3,10 @@ import torch.nn as nn
 from sympy import multinomial_coefficients
 import numpy as np
 from sympy import multinomial_coefficients
-
+from torch.utils.data import TensorDataset, DataLoader
 
 from EquiNet import *
+from torch.optim import Adam
 #
 # weightTensor = torch.randn(5)
 # print(weightTensor)
@@ -34,51 +35,83 @@ from EquiNet import *
 # print(len(val.weightMatrix))
 # print(val.weightMatrix)
 
+def argmax_one_hot(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    idx = x.argmax(dim=dim, keepdim=True)
+    return torch.zeros_like(x,dtype=torch.float32).scatter_(dim,idx,1.0)
+
+def run_experiment(model, data, num_epochs=10000, lr=1e-3, device="cpu", size=10):
+    model.to(device)
+    criterion = nn.MSELoss()
+    optimizer = Adam(model.parameters(), lr=lr)
+    for epoch in range(1, num_epochs + 1):
+        model.train()
+
+        for xb, yb in data:
+            xb, yb = xb.to(device), yb.to(device)
+
+            optimizer.zero_grad()
+            logits = model(xb)
+            lossval = criterion(logits, yb)
+            lossval.backward()
+            optimizer.step()
+
+        if epoch % 50 == 0:
+            with torch.no_grad():
+                pred = model(xb)
+                acc = (pred == yb.to(device)).float().mean()
+                print(f"epoch {epoch:03d}  loss {lossval.item():.4f}  acc {acc:.2%}")
+
+    #
+    model.eval()
+    with torch.no_grad():
+        vec = torch.randn(size)
 
 
-layer1 = PermutationClosedLayer(20,40,None,False,2)
-layer2 = PermutationClosedLayer(40,80,layer1,False,2)
-layer3 = PermutationClosedLayer(80,20,layer2,False,2)
-seq = nn.Sequential(layer1,layer2,layer3)
-check1 = layer1.weights.detach().numpy()
-check2 = layer2.weights.detach().numpy()
-check4 = layer3.running_weight_matrix.detach().numpy()
-check3 = layer3.weights.detach().numpy()
-check6 = layer2.running_weight_matrix.detach().numpy()
-print(layer2.weights)
-print(layer3.weights)
-seq.eval()
-with torch.no_grad():
-    vec = torch.randn(20)
-    print(vec)
-    vec[0] = 1
-    vec[1] = -2
-    val = seq(vec)
-    print(val)
-    vec[0] = -2
-    vec[1] = 1
-    val2 = seq(vec)
-    print(val2)
 
-# pcs = PermutationClosedStructureInverse(A)
-# add = torch.zeros_like(pcs.weightMatrix)
-# # print(A_linv)
-# add[0] += torch.tensor([0.1,-0.1,0.2,0.2,0.1,-0.1])
-# add[1] += torch.tensor([-0.1,0.1,-0.1,0.1,0.2,0.2])
-# add[2] += torch.tensor([0.2,0.2,0.1,-0.1,-0.1,0.1])
-#
-# print(pcs.weightMatrix)
-# print()
-# print((pcs.weightMatrix + add) @ A)
+        vec[0] = 10
+        vec[1] = -2
+        ver = argmax_one_hot(vec, 0)
+        print(f"Value before Permutation: {vec}")
+        print(f"Correct one hot for argmax: {ver}")
+        val = model(vec)
+        print(f"Output: {val}")
+        vec[0] = -2
+        vec[1] = 10
+        print(f"Value after Permutation: {vec}")
+        val2 = model(vec)
+        print(f"Output: {val2}")
 
-# layer1 = PermutationClosedLayer(5,10,None,False,2)
-# layer2 = PermutationClosedLayer(10,5,layer1,False,2)
-# seq = nn.Sequential(layer1,layer2)
-# seq.eval()
-# with torch.no_grad():
-#     val = seq(torch.tensor([1.,2.,3.,4.,5.]))
-#     print(val)
-#     val2 = seq(torch.tensor([1.,2.,3.,5.,4.]))
-#     print(val2)
-#     val3 = seq(torch.tensor([3.,2.,1.,5.,4.]))
-#     print(val3)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+d = 3       # dimensionality
+N = 100  # samples
+x = torch.randn(N, d)     # e.g. N(0,1) inputs
+y = argmax_one_hot(x,1) # integer labels: argmax index
+print(x)
+print(y)
+
+
+
+layer1 = PermutationClosedLayer(d ,2*d ,None,False,2)
+layer2 = PermutationClosedLayer(2*d ,d ,layer1,False,2)
+seq = nn.Sequential(layer1,layer2,nn.Softmax()).to(device)
+seq_verify = nn.Sequential(nn.Linear(d ,2*d ),nn.Linear(2*d ,d),nn.Softmax()).to(device)
+
+torch.manual_seed(42)
+
+
+num_epochs = 15000
+batch_size = 16
+train_batches = [(x.to(device), y.to(device))]
+train_set = TensorDataset(x, y)
+
+run_experiment(seq,train_batches,num_epochs, 1e-3, device,d )
+torch.manual_seed(42)
+run_experiment(seq_verify,train_batches,num_epochs,1e-3,device,d)
+# torch.manual_seed(42)
+# d = 100       # dimensionality
+# N = 10000              # samples
+# x = torch.randn(N, d)     # e.g. N(0,1) inputs
+# y = argmax_one_hot(x,1) # integer labels: argmax index
+# train_batches = [(x.to(device), y.to(device))]
+# run_experiment(seq_verify,train_batches,num_epochs,1e-3,device)

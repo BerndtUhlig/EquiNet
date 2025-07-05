@@ -7,17 +7,19 @@ import numpy as np
 from typing import List
 
 
-class ConstantNode:
+class ConstantNode(nn.Module):
 
     def __init__(self, k: int):
+        super().__init__()
         self.value = nn.Parameter(torch.full((k,), torch.randn(1).item()))
 
 
-class PermutationClosedStructure:
+class PermutationClosedStructure(nn.Module):
 
     def __init__(self, k: int, n_list: List[int] = None):
+        super().__init__()
         self.k = k
-        weightTensor = torch.rand(k)
+        weightTensor = torch.randn(k)
         self.weightParameter = nn.Parameter(weightTensor)
         weightList = self.weightParameter.tolist()
         if n_list is None:
@@ -34,18 +36,20 @@ class PermutationClosedStructure:
         reference = weightList
         self.indices = torch.tensor(
             np.array( [[np.where(np.isclose(reference, element))[0][0] for element in row] for row in val]))
-        self.weightMatrix = self.weightParameter[self.indices]
 
-    def regenerateWeightMatrix(self):
-        self.weightMatrix = self.weightParameter[self.indices]
+    def forward(self):
+        return self.weightParameter[self.indices]
 
 
-class PermutationClosedStructureInverse:
+
+class PermutationClosedStructureInverse(nn.Module):
 
     def __init__(self, running_weight_matrix):
+        super().__init__()
         # This may be rather poor in performance => Potential for using "pseudo inverse"
         running_weight_matrix_check = running_weight_matrix.detach().numpy()
         transpose = running_weight_matrix.T.detach().numpy()
+        transpose = transpose
         reference = np.unique(transpose[0])
         test =  transpose @ running_weight_matrix.detach().numpy()
         self.weightMatrix = []
@@ -59,12 +63,12 @@ class PermutationClosedStructureInverse:
         #              print("OY")
         self.indices = torch.tensor(np.array(check))
         self.k = len(reference)
-        weight_vals = torch.rand(self.k)
+        weight_vals = torch.randn(self.k)
         self.weightParameter = nn.Parameter(weight_vals).to(torch.float32)
-        self.weightMatrix = self.weightParameter[self.indices]
 
-    def regenerateWeightMatrix(self):
-        self.weightMatrix = self.weightParameter[self.indices]
+
+    def forward(self):
+        return self.weightParameter[self.indices]
 
 
 
@@ -72,8 +76,8 @@ class PermutationClosedLayer(nn.Module):
 
     def __init__(self, input_size: int, output_size: int, predecessor, last_layer, max_weights_PCS: int):
         super().__init__()
-        self.PCSList = []
-        self.constants = []
+        self.PCSList = nn.ModuleList()
+        self.constants = nn.ModuleList()
         self.input_size = input_size
         self.output_size = output_size
         self.predecessor = predecessor
@@ -81,7 +85,7 @@ class PermutationClosedLayer(nn.Module):
         if input_size <= output_size:
             print("GENERATING PCS SMALL TO BIG")
             self.pcs_generation(input_size, output_size, max_weights_PCS)
-            self.weights = torch.vstack([x.weightMatrix for x in self.PCSList])
+
             sum = 0
             for i in range(len(self.PCSList)):
                 if i == 0:
@@ -90,9 +94,7 @@ class PermutationClosedLayer(nn.Module):
                     sum += self.PCSList[i].k
                     pcsindex = self.PCSList[i].indices
                     self.indices = torch.vstack([self.indices, pcsindex + torch.full(pcsindex.size(),sum)])
-            if len(self.constants) > 0:
-                constant_matrix = torch.vstack([x.value for x in self.constants])
-                self.weights = torch.vstack((self.weights,constant_matrix))
+
         else:
             print("GENERATING PCS BIG TO SMALL")
             curr_pred = predecessor
@@ -115,7 +117,6 @@ class PermutationClosedLayer(nn.Module):
                     constant = ConstantNode(input_size)
                     self.constants.append(constant)
                 constant_matrix = torch.vstack([x.value for x in self.constants])
-                self.weights = torch.vstack((self.weights, constant_matrix))
         if predecessor is not None:
             numpy_check = predecessor.running_weight_matrix.detach().numpy()
             self.running_weight_matrix = self.indices @ predecessor.running_weight_matrix
@@ -125,7 +126,11 @@ class PermutationClosedLayer(nn.Module):
     def forward(self,x):
         #print("FORWARD CALLED")
         #self.regenerate_weight_matrix()
-        val = self.weights @ x
+        weights = torch.vstack([x() for x in self.PCSList])
+        if len(self.constants) > 0:
+            constant_matrix = torch.vstack([x.value for x in self.constants])
+            weights = torch.vstack((weights, constant_matrix))
+        val = x @ weights.T
         return val
 
     # 5!  > 5!/2! * 2! * 1! > 5!/3!*1!*1! > 5!/4! * 1!
