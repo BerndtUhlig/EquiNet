@@ -59,7 +59,7 @@ def run_experiment(model, data, num_epochs=10000, lr=1e-3, device="cpu", size=10
             with torch.no_grad():
                 pred = model(xb)
                 acc = (pred == yb.to(device)).float().mean()
-                print(f"epoch {epoch:03d}  loss {lossval.item():.4f}  acc {acc:.2%}")
+                print(f"epoch {epoch:03d}  loss {lossval.item()}  acc {acc:.2%}")
 
     #
     model.eval()
@@ -83,8 +83,8 @@ def run_experiment(model, data, num_epochs=10000, lr=1e-3, device="cpu", size=10
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-d = 3       # dimensionality
-N = 100  # samples
+d = 100       # dimensionality
+N = 1000  # samples
 x = torch.randn(N, d)     # e.g. N(0,1) inputs
 y = argmax_one_hot(x,1) # integer labels: argmax index
 print(x)
