@@ -1,12 +1,12 @@
 import numpy
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from sympy.utilities.iterables import multiset_permutations
 from sympy import multinomial_coefficients
 import numpy as np
 from typing import List
 import math
-import weakref
 
 
 class ConstantNode(nn.Module):
@@ -17,7 +17,7 @@ class ConstantNode(nn.Module):
         self.value = nn.Parameter(torch.randn(1))
 
     def forward(self,x):
-        return x @ torch.full((self.size,),self.value.item()).T
+        return torch.full((self.size,),self.value.item()) @ x
 
 
 class PermutationClosedStructure(nn.Module):
@@ -38,9 +38,30 @@ class PermutationClosedStructure(nn.Module):
                     new_tensor_data.append(i)
             val = list(multiset_permutations(new_tensor_data))
             self.indices = torch.tensor(val)
+            # matrixSplits = [
+            # [[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in range(self.indices.size(0))] for k in
+            # range(self.k)
+            # ]
+            # self.weightIndicesSplits = [torch.tensor(x) for x in matrixSplits]
 
     def forward(self,x):
-        return x @ (self.weightParameter[self.indices]).T
+        S = torch.einsum('bd,rdk->brk', x, self.mask)
+
+        # STEP B – multiply each group by its learnable scalar
+        weighted = S * self.weight  # (B, rows, k)
+
+        # STEP C – add the k groups → same shape as old `result`
+        out = weighted.sum(2)  # (B, rows)
+        return out
+        #
+        # check = (x[:,self.weightIndicesSplits[0]])
+        # result = (self.weightParameter[0] * torch.sum(check, dim=2))
+        # for i in range(1, self.k):
+        #     check2 =   x[:,self.weightIndicesSplits[i]]
+        #     result += self.weightParameter[i] * torch.sum(check2,dim=2)
+        # final = result
+        # return final
+
 
 
 class PermutationClosedStructureInverse(nn.Module):
@@ -66,10 +87,32 @@ class PermutationClosedStructureInverse(nn.Module):
         self.k = len(reference)
         weight_vals = torch.randn(self.k)
         self.weightParameter = nn.Parameter(weight_vals).to(torch.float32)
-        print(sum(p.numel() for p in self.parameters() if p.requires_grad))
+        mask = F.one_hot(running_weight_matrix, num_classes=self.k).float()
+        self.register_buffer("mask", mask)
+        # matrixSplits = [
+        #     [[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in range(self.indices.size(0))]
+        #     for k in
+        #     range(self.k)
+        # ]
+        # self.weightIndicesSplits = [torch.tensor(x) for x in matrixSplits]
 
     def forward(self,x):
-        return x @ (self.weightParameter[self.indices]).T
+        S = torch.einsum('bd,rdk->brk', x, self.mask)
+
+        # STEP B – multiply each group by its learnable scalar
+        weighted = S * self.weight  # (B, rows, k)
+
+        # STEP C – add the k groups → same shape as old `result`
+        out = weighted.sum(2)  # (B, rows)
+        return out
+
+        # check = (x[:, self.weightIndicesSplits[0]])
+        # result = (self.weightParameter[0] * torch.sum(check, dim=2))
+        # for i in range(1, self.k):
+        #     check2 = x[:, self.weightIndicesSplits[i]]
+        #     result += self.weightParameter[i] * torch.sum(check2, dim=2)
+        # final = result
+        # return final
 
 
 
@@ -81,7 +124,7 @@ class PermutationClosedLayer(nn.Module):
         self.constants = nn.ModuleList()
         self.input_size = input_size
         self.output_size = output_size
-        self.predecessor = weakref.ref(predecessor) if predecessor is not None else None
+        self.predecessor = predecessor
         print("LAYER GENERATION STARTED")
         if input_size <= output_size:
             print("GENERATING PCS SMALL TO BIG")

@@ -5,7 +5,7 @@ import numpy as np
 from sympy import multinomial_coefficients
 from torch.utils.data import TensorDataset, DataLoader
 
-from EquiNetSplit import *
+from EquiNetChannels import *
 from torch.optim import Adam
 #
 # weightTensor = torch.randn(5)
@@ -34,12 +34,9 @@ from torch.optim import Adam
 # val = PermutationClosedStructure(10, [9,1])
 # print(len(val.weightMatrix))
 # print(val.weightMatrix)
-d = 1000       # dimensionality
+d = 100       # dimensionality
 N = 1000  # samples
-
-def count_trainable(model: torch.nn.Module) -> int:
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-def argmax_one_hot(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
+def argmax_one_hot(x: torch.Tensor, dim: int = 1) -> torch.Tensor:
     idx = x.argmax(dim=dim, keepdim=True)
     return torch.zeros_like(x,dtype=torch.float32).scatter_(dim,idx,1.0)
 
@@ -75,7 +72,7 @@ def run_experiment(model, data, num_epochs=10000, lr=1e-3, device="cpu", size=10
         acc = (val == y_val.to(device)).float().mean()
         print(f"Validation Accuracy {acc:.2%}")
 
-device = "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 torch.manual_seed(42)
 x = torch.randn(N, d)     # e.g. N(0,1) inputs
@@ -88,10 +85,6 @@ print(y)
 
 layer1 = PermutationClosedLayer(d ,2*d ,None,False)
 layer2 = PermutationClosedLayer(2*d ,d,layer1,False)
-print(count_trainable(layer1))
-print([p for p in layer1.parameters()])
-print(count_trainable(layer2))
-print([p for p in layer2.parameters()])
 seq = nn.Sequential(layer1,layer2,nn.Softmax()).to(device)
 seq_verify = nn.Sequential(nn.Linear(d ,2*d ),nn.Linear(2*d ,d),nn.Softmax()).to(device)
 
