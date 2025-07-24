@@ -28,7 +28,7 @@ class PointCloudTrainer(object):
         self.model_fetcher = modelnet.ModelFetcher(data_path, batch_size, downsample, do_standardize=True, do_augmentation=True)
         sample_size = int(10000/downsample)
         #Setup network
-        self.D = classifier.DPCSTanh(sample_size,network_dim, pool='max').cuda()
+        self.D = classifier.DPCSTanh(sample_size,network_dim, pool='mean').cuda()
         self.L = nn.CrossEntropyLoss().cuda()
         self.optimizer = optim.Adam([{'params':self.D.parameters()}], lr=1e-3, weight_decay=1e-7, eps=1e-3)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=list(range(400,num_epochs,400)), gamma=0.1)

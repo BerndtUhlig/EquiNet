@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sympy.utilities.iterables import multiset_permutations
 from sympy import multinomial_coefficients
+from more_itertools import distinct_permutations
 import numpy as np
 from typing import List
 import math
@@ -27,19 +28,22 @@ class PermutationClosedStructure(nn.Module):
     def __init__(self, k: int, channels_in: int, channels_out: int,  pooling_function: str, n_list: List[int] = None):
         super().__init__()
         self.k = k
+        self.channels_in = channels_in
+        self.channels_out = channels_out
         self.pooling_function = pooling_function
         weightTensor = torch.randn(k,channels_out,channels_in)
         self.weightParameter = nn.Parameter(weightTensor)
         weightList = self.weightParameter.tolist()
         if n_list is None:
-            val = list(multiset_permutations(weightList))
+            val = list(distinct_permutations(weightList))
             val = [list(i) for i in val]
         else:
             new_tensor_data = []
             for i in range(len(n_list)):
                 for b in range(n_list[i]):
                     new_tensor_data.append(i)
-            val = list(multiset_permutations(new_tensor_data))
+            tuples = list(distinct_permutations(new_tensor_data))
+            val = [list(data) for data in tuples]
             self.indices = torch.tensor(val)
             #
             # mask = F.one_hot(self.indices, num_classes=self.k).float()
@@ -53,16 +57,35 @@ class PermutationClosedStructure(nn.Module):
     def forward(self,x):
         samples, size, channels = x.shape
         rows, D = self.indices.shape
+
         if self.pooling_function == "mean":
+            # result = torch.zeros(samples, rows, self.channels_out, device=x.device, dtype=x.dtype)
+            # for k in range(self.k):
+            #     w_k = self.weightParameter[k]
+            #     row_means = []
+            #     for j in range(rows):
+            #         idx = self.weightIndicesSplits[k][j].to(x.device)
+            #         row_means.append(x[:, idx, :].mean(dim=1))
+            #     means_k = torch.stack(row_means, dim=1)
+            #     result += means_k @ w_k.T
 
             check = (x[:, self.weightIndicesSplits[0]])
-            mean = torch.mean(check, dim=2)
-            result = mean @ (self.weightParameter[0]).T
+            meen = torch.mean(check, dim=2)
+            result = meen @ (self.weightParameter[0]).T
             for i in range(1, self.k):
                 check2 = x[:, self.weightIndicesSplits[i]]
-                result += torch.mean(check, dim=2).values @ (self.weightParameter[i]).T
-            final = result
-            return final
+                result += torch.mean(check2, dim=2) @ (self.weightParameter[i]).T
+
+            return result
+
+            # check = (x[:, self.weightIndicesSplits[0]])
+            # meen = torch.mean(check, dim=2)
+            # result = meen @ (self.weightParameter[0]).T
+            # for i in range(1, self.k):
+            #     check2 = x[:, self.weightIndicesSplits[i]]
+            #     result += torch.mean(check2, dim=2) @ (self.weightParameter[i]).T
+            # final = result
+            # return final
 
             # S = torch.einsum('bdc,rdk->brkc', x, self.mask)
             #
@@ -81,7 +104,7 @@ class PermutationClosedStructure(nn.Module):
             result = max @ (self.weightParameter[0]).T
             for i in range(1, self.k):
                 check2 = x[:, self.weightIndicesSplits[i]]
-                result += torch.max(check, dim=2).values @ (self.weightParameter[i]).T
+                result += torch.max(check2, dim=2).values @ (self.weightParameter[i]).T
             final = result
             return final
 
@@ -95,6 +118,17 @@ class PermutationClosedStructure(nn.Module):
         else:
             # out = torch.einsum('bdc,rdcf->brf', x, self.weightParameter[self.indices])
             # return out
+            # result = torch.zeros(samples, rows, self.channels_out, device=x.device, dtype=x.dtype)
+            # for k in range(self.k):
+            #     w_k = self.weightParameter[k]
+            #     row_means = []
+            #     for j in range(rows):
+            #         idx = self.weightIndicesSplits[k][j].to(x.device)
+            #         row_means.append(x[:, idx, :].sum(dim=1))
+            #     means_k = torch.stack(row_means, dim=1)
+            #     result += means_k @ w_k.T
+            # return result
+
             check = (x[:, self.weightIndicesSplits[0]])
             sum = torch.sum(check, dim=2)
             result = sum @ (self.weightParameter[0]).T
@@ -115,6 +149,8 @@ class PermutationClosedStructureInverse(nn.Module):
     def __init__(self,channels_in, channels_out,pooling_function: str, running_weight_matrix):
         super().__init__()
         self.pooling_function = pooling_function
+        self.channels_in = channels_in
+        self.channels_out = channels_out
         # This may be rather poor in performance => Potential for using "pseudo inverse"
         running_weight_matrix_check = running_weight_matrix.detach().numpy()
         transpose = running_weight_matrix.T.detach().numpy()
@@ -137,26 +173,45 @@ class PermutationClosedStructureInverse(nn.Module):
 
         # mask = F.one_hot(self.indices, num_classes=self.k).float()
         # self.register_buffer("mask", mask)
-        matrixSplits = [
-            [[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in range(self.indices.size(0))]
+
+        mt = [[[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in range(self.indices.size(0))]
             for k in
             range(self.k)
         ]
-        self.weightIndicesSplits = [torch.tensor(x) for x in matrixSplits]
+        self.weightIndicesSplits = [torch.tensor(x) for x in mt]
 
     def forward(self,x):
         samples, size, channels = x.shape
         rows, D = self.indices.shape
+
         if self.pooling_function == "mean":
+            # result = torch.zeros(samples, rows, self.channels_out, device=x.device, dtype=x.dtype)
+            # for k in range(self.k):
+            #     w_k = self.weightParameter[k]
+            #     row_means = []
+            #     for j in range(rows):
+            #         idx = self.weightIndicesSplits[k][j].to(x.device)
+            #         row_means.append(x[:, idx, :].mean(dim=1))
+            #     means_k = torch.stack(row_means, dim=1)
+            #     result += means_k @ w_k.T
 
             check = (x[:, self.weightIndicesSplits[0]])
-            mean = torch.mean(check, dim=2)
-            result = mean @ (self.weightParameter[0]).T
+            meen = torch.mean(check, dim=2)
+            result = meen @ (self.weightParameter[0]).T
             for i in range(1, self.k):
                 check2 = x[:, self.weightIndicesSplits[i]]
-                result +=  torch.mean(check, dim=2).values @ (self.weightParameter[i]).T
-            final = result
-            return final
+                result += torch.mean(check2, dim=2) @ (self.weightParameter[i]).T
+
+            return result
+
+            # check = (x[:, self.weightIndicesSplits[0]])
+            # meen = torch.mean(check, dim=2)
+            # result = meen @ (self.weightParameter[0]).T
+            # for i in range(1, self.k):
+            #     check2 = x[:, self.weightIndicesSplits[i]]
+            #     result += torch.mean(check2, dim=2) @ (self.weightParameter[i]).T
+            # final = result
+            # return final
 
             # S = torch.einsum('bdc,rdk->brkc', x, self.mask)
             #
@@ -174,12 +229,10 @@ class PermutationClosedStructureInverse(nn.Module):
             max = torch.max(check, dim=2).values
             result = max @ (self.weightParameter[0]).T
             for i in range(1, self.k):
-                check2 = x[:, self.weightIndicesSplits[i]]
-                result +=  torch.max(check, dim=2).values @ (self.weightParameter[i]).T
+                check2 = x[:, self.weightIndicesSplits[i]].to(x.device)
+                result += torch.max(check2, dim=2).values @ (self.weightParameter[i]).T
             final = result
             return final
-
-
 
             # indices_exp = self.indices.expand(samples, -1, -1, channels)
             # neg_inf = torch.finfo(x.dtype).min
@@ -191,12 +244,23 @@ class PermutationClosedStructureInverse(nn.Module):
         else:
             # out = torch.einsum('bdc,rdcf->brf', x, self.weightParameter[self.indices])
             # return out
+            # result = torch.zeros(samples, rows, self.channels_out, device=x.device, dtype=x.dtype)
+            # for k in range(self.k):
+            #     w_k = self.weightParameter[k]
+            #     row_means = []
+            #     for j in range(rows):
+            #         idx = self.weightIndicesSplits[k][j]
+            #         row_means.append(x[:, idx, :].sum(dim=1))
+            #     means_k = torch.stack(row_means, dim=1)
+            #     result += means_k @ w_k.T
+            # return result
+
             check = (x[:, self.weightIndicesSplits[0]])
             sum = torch.sum(check, dim=2)
             result = sum @ (self.weightParameter[0]).T
             for i in range(1, self.k):
                 check2 = x[:, self.weightIndicesSplits[i]]
-                result +=  torch.sum(check2, dim=2) @ (self.weightParameter[i]).T
+                result += torch.sum(check2, dim=2) @ (self.weightParameter[i]).T
             final = result
             return final
 

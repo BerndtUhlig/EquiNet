@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from sympy.utilities.iterables import multiset_permutations
 from sympy import multinomial_coefficients
+from more_itertools import distinct_permutations
 import numpy as np
 from typing import List
 import math
@@ -29,14 +30,15 @@ class PermutationClosedStructure(nn.Module):
         self.weightParameter = nn.Parameter(weightTensor)
         weightList = self.weightParameter.tolist()
         if n_list is None:
-            val = list(multiset_permutations(weightList))
+            val = list(distinct_permutations(weightList))
             val = [list(i) for i in val]
         else:
             new_tensor_data = []
             for i in range(len(n_list)):
                 for b in range(n_list[i]):
                     new_tensor_data.append(i)
-            val = list(multiset_permutations(new_tensor_data))
+            tuples = list(distinct_permutations(new_tensor_data))
+            val = [list(data) for data in tuples]
             self.indices = torch.tensor(val)
 
     def forward(self,x):
