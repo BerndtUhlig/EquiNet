@@ -12,7 +12,7 @@ import modelnet
 #################### Settings ##############################
 num_epochs = 1000
 batch_size = 64
-downsample = 100    #For 5000 points use 2, for 1000 use 10, for 100 use 100
+downsample = 10    #For 5000 points use 2, for 1000 use 10, for 100 use 100
 network_dim = 256  #For 5000 points use 512, for 1000 use 256, for 100 use 256
 num_repeats = 5    #Number of times to repeat the experiment
 data_path = 'ModelNet40_cloud.h5'
@@ -69,7 +69,7 @@ class PointCloudTrainer(object):
             X = Variable(torch.cuda.FloatTensor(x))
             Y = Variable(torch.cuda.LongTensor(y))
             f_X = self.D(X)
-            sum_acc += (f_X.max(dim=1)[1] == Y).float().sum().data.cpu().numpy()[0]
+            sum_acc += (f_X.max(dim=1)[1] == Y).float().sum().item()
             del X,Y,f_X
         test_acc = sum_acc/counts
         print('Final Test Accuracy: {0:0.3f}'.format(test_acc))
