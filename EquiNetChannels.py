@@ -188,7 +188,9 @@ class PermutationClosedStructureInverse(nn.Module):
         self.channels_out = channels_out
         self.PCSList = nn.ModuleList()
         transpose = running_weight_matrix.T
+        check =  transpose @ running_weight_matrix
         rows, _ = transpose.shape
+
         reference = np.unique(transpose[0])
 
         for i in range(int(len(reference)/2)):
