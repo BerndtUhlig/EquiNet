@@ -31,37 +31,153 @@ class ConstantNode(nn.Module):
 
 class PermutationClosedStructure(nn.Module):
 
-    def __init__(self, k: int, channels_in: int, channels_out: int, n_list: List[int] = None):
+    def __init__(self, k: int, channels_in: int, channels_out: int,  pooling_function: str, n_list: List[int] = None):
         super().__init__()
         self.k = k
         self.channels_in = channels_in
         self.channels_out = channels_out
-        weights = torch.randn(k,channels_out,channels_in)
-        self.weightParameter = torch.nn.Parameter(weights)
+        self.Gamma = nn.Linear(channels_in,channels_out)
+        self.Lambda = nn.Linear(channels_in,channels_out, bias=False)
+        self.pooling_function = pooling_function
         new_tensor_data = []
         for i in range(len(n_list)):
             for b in range(n_list[i]):
                 new_tensor_data.append(i)
         tuples = list(distinct_permutations(new_tensor_data))
         val = [list(data) for data in tuples]
-        indices = torch.tensor(val) # (P, N)
-        self.register_buffer("indices", indices)
-        self.inputSize =  indices.size(1)
-        self.outputSize =  indices.size(0)
-        M = torch.stack([( self.indices == a).float() for a in range(k)], 0)
-        self.register_buffer("M", M)
+        self.indices = torch.tensor(val)
+
+        # self.pooling_function = pooling_function
+        # weightTensor = torch.randn(k, channels_out, channels_in)
+        # self.weightParameter = nn.Parameter(weightTensor)
+        # weightList = self.weightParameter.tolist()
+        # if n_list is None:
+        #     val = list(distinct_permutations(weightList))
+        #     val = [list(i) for i in val]
+        # else:
+        #     new_tensor_data = []
+        #     for i in range(len(n_list)):
+        #         for b in range(n_list[i]):
+        #             new_tensor_data.append(i)
+        #     tuples = list(distinct_permutations(new_tensor_data))
+        #     val = [list(data) for data in tuples]
+        #     self.indices = torch.tensor(val)
+        #     #
+        #     # mask = F.one_hot(self.indices, num_classes=self.k).float()
+        #     # self.register_buffer("mask", mask)
+        #     matrixSplits = [
+        #         [[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in
+        #          range(self.indices.size(0))] for k in
+        #         range(self.k)
+        #     ]
+        #     self.weightIndicesSplits = [torch.tensor(x) for x in matrixSplits]
+
 
     def forward(self,x):
-        B,L,C = x.shape
-        assert C == self.channels_in
-        y = x.new_zeros(B, self.outputSize, self.channels_out)
-        for index in range(self.k):
-            val = self.weightParameter[index].T
-            W_k = x @ val
-            index_m = self.M[index]
-            sol = torch.einsum("BNC, PN-> BPC", W_k, index_m)
-            y+=sol
-        return y
+        samples, size, channels = x.shape
+        rows, D = self.indices.shape
+
+        if self.pooling_function == "mean":
+
+            xm = x.mean(1,keepdim=True)
+            xm = self.Lambda(xm)
+            x = self.Gamma(x)
+            result = x - xm
+            return result
+
+
+            # result = torch.zeros(samples, rows, self.channels_out, device=x.device, dtype=x.dtype)
+            # for k in range(self.k):
+            #     w_k = self.weightParameter[k]
+            #     row_means = []
+            #     for j in range(rows):
+            #         idx = self.weightIndicesSplits[k][j].to(x.device)
+            #         row_means.append(x[:, idx, :].mean(dim=1))
+            #     means_k = torch.stack(row_means, dim=1)
+            #     result += means_k @ w_k.T
+
+            # check = (x[:, self.weightIndicesSplits[0]])
+            # meen = torch.mean(check, dim=2)
+            # result = meen @ (self.weightParameter[0]).T
+            # for i in range(1, self.k):
+            #     check2 = x[:, self.weightIndicesSplits[i]]
+            #     result += torch.mean(check2, dim=2) @ (self.weightParameter[i]).T
+            #
+            # return result
+
+            # check = (x[:, self.weightIndicesSplits[0]])
+            # meen = torch.mean(check, dim=2)
+            # result = meen @ (self.weightParameter[0]).T
+            # for i in range(1, self.k):
+            #     check2 = x[:, self.weightIndicesSplits[i]]
+            #     result += torch.mean(check2, dim=2) @ (self.weightParameter[i]).T
+            # final = result
+            # return final
+
+            # S = torch.einsum('bdc,rdk->brkc', x, self.mask)
+            #
+            # counts = self.mask.sum(1)
+            # unsqueezed_counts = counts.unsqueeze(0).unsqueeze(-1).clamp(min=1)
+            # S_mean = S / unsqueezed_counts
+            # # STEP B – multiply each group by its learnable scalar
+            # weighted = torch.einsum('brkc,kcf->brkf', S_mean, self.weightParameter)
+            #
+            # # STEP C – add the k groups → same shape as old `result`
+            # out = weighted.sum(2)  # (B, rows)
+
+        elif self.pooling_function == "max":
+
+            xm, _ = x.max(1, keepdim=True)
+            xm = self.Lambda(xm)
+            x = self.Gamma(x)
+            result = x - xm
+            return result
+
+            # check = (x[:, self.weightIndicesSplits[0]])
+            # max = torch.max(check, dim=2).values
+            # result = max @ (self.weightParameter[0]).T
+            # for i in range(1, self.k):
+            #     check2 = x[:, self.weightIndicesSplits[i]]
+            #     result += torch.max(check2, dim=2).values @ (self.weightParameter[i]).T
+            # final = result
+            # return final
+
+            # indices_exp = self.indices.expand(samples, -1, -1, channels)
+            # neg_inf = torch.finfo(x.dtype).min
+            # src = x.unsqueeze(1).expand(samples, rows, size, channels)
+            # S_max = torch.full((samples, rows, self.k, channels), neg_inf, device=x.device)
+            # S_max.scatter_reduce_(dim=2, index=indices_exp, src=src, reduce="amax")
+            # S_max = S_max.sum(2)
+            # return S_max
+        else:
+            xm = x.sum(1, keepdim=True)
+            xm = self.Lambda(xm)
+            x = self.Gamma(x)
+            result = x - xm
+            return result
+
+
+            # out = torch.einsum('bdc,rdcf->brf', x, self.weightParameter[self.indices])
+            # return out
+            # result = torch.zeros(samples, rows, self.channels_out, device=x.device, dtype=x.dtype)
+            # for k in range(self.k):
+            #     w_k = self.weightParameter[k]
+            #     row_means = []
+            #     for j in range(rows):
+            #         idx = self.weightIndicesSplits[k][j].to(x.device)
+            #         row_means.append(x[:, idx, :].sum(dim=1))
+            #     means_k = torch.stack(row_means, dim=1)
+            #     result += means_k @ w_k.T
+            # return result
+
+            # check = (x[:, self.weightIndicesSplits[0]])
+            # sum = torch.sum(check, dim=2)
+            # result = sum @ (self.weightParameter[0]).T
+            # for i in range(1, self.k):
+            #     check2 = x[:, self.weightIndicesSplits[i]]
+            #     result += torch.sum(check2, dim=2) @ (self.weightParameter[i]).T
+            # final = result
+            # return final
 
 
 
@@ -71,8 +187,9 @@ class PermutationClosedStructure(nn.Module):
 
 class PermutationClosedStructureInverse(nn.Module):
 
-    def __init__(self,channels_in, channels_out, running_weight_matrix):
+    def __init__(self,channels_in, channels_out,pooling_function: str, running_weight_matrix):
         super().__init__()
+        self.pooling_function = pooling_function
         self.channels_in = channels_in
         self.channels_out = channels_out
         self.PCSList = nn.ModuleList()
@@ -88,7 +205,7 @@ class PermutationClosedStructureInverse(nn.Module):
             else:
                 state = reference
                 if len(reference) > 1:
-                    self.PCSList.append(PermutationClosedStructure(2,channels_in,channels_out,[1,rows-1]))
+                    self.PCSList.append(PermutationClosedStructure(2,channels_in,channels_out,pooling_function,[1,rows-1]))
                 else:
                     self.constants.append(ConstantNode(channels_in,channels_out,1))
 
@@ -106,6 +223,29 @@ class PermutationClosedStructureInverse(nn.Module):
                 sum += 1
                 constindex = torch.full((rows,1), sum)
                 self.indices = torch.hstack([self.indices, constindex])
+        #
+        #
+        # # This may be rather poor in performance => Potential for using "pseudo inverse"
+        # running_weight_matrix_check = running_weight_matrix.detach().numpy()
+        # transpose = running_weight_matrix.T.detach().numpy()
+        # transpose = transpose
+        # reference = np.unique(transpose[0])
+        # test =  transpose @ running_weight_matrix.detach().numpy()
+        # self.weightMatrix = []
+        # check = [[np.where(np.isclose(reference, element))[0][0] for element in row] for row in transpose]
+        # indicesold = torch.tensor(np.array(check))
+        # self.k = len(reference)
+        # weight_vals = torch.randn(self.k,channels_out,channels_in)
+        # self.weightParameter = nn.Parameter(weight_vals).to(torch.float32)
+        #
+        # # mask = F.one_hot(self.indices, num_classes=self.k).float()
+        # # self.register_buffer("mask", mask)
+        #
+        # mt = [[[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in range(self.indices.size(0))]
+        #     for k in
+        #     range(self.k)
+        # ]
+        # self.weightIndicesSplits = [torch.tensor(x) for x in mt]
 
     def forward(self,x):
         samples, points, channels = x.shape
@@ -127,17 +267,18 @@ class PermutationClosedStructureInverse(nn.Module):
 
 class PermutationClosedLayer(nn.Module):
 
-    def __init__(self, input_size: int, output_size: int, channels_in: int, channels_out: int, predecessor, find_max_pcs: bool):
+    def __init__(self, input_size: int, output_size: int, channels_in: int, channels_out: int,pooling_function: str, predecessor, find_max_pcs: bool):
         super().__init__()
         self.PCSList = nn.ModuleList()
         self.constants = nn.ModuleList()
         self.input_size = input_size
         self.output_size = output_size
         self.predecessor = predecessor
+        self.pooling_function = pooling_function
         print("LAYER GENERATION STARTED")
         if input_size <= output_size:
             print("GENERATING PCS SMALL TO BIG")
-            self.pcs_generation(input_size, output_size, channels_in, channels_out, find_max_pcs)
+            self.pcs_generation(input_size, output_size, channels_in, channels_out,pooling_function, find_max_pcs)
 
             sum = 0
             for i in range(len(self.PCSList)):
@@ -176,7 +317,7 @@ class PermutationClosedLayer(nn.Module):
             assert (curr_pred is not None)
 
             difference = self.output_size - curr_pred.input_size
-            pcsInv = PermutationClosedStructureInverse( channels_in,channels_out,running_weight_matrix)
+            pcsInv = PermutationClosedStructureInverse( channels_in,channels_out,pooling_function,running_weight_matrix)
             self.PCSList.append(pcsInv)
             self.indices = pcsInv.indices
             self.constants = pcsInv.constants
@@ -208,15 +349,13 @@ class PermutationClosedLayer(nn.Module):
     def create_maximum_pcs(self, input_size:int, output_size: int):
         list = []
         k = math.factorial(input_size)
-        list.append(input_size-1)
-        list.append(1)
-        for i in range(input_size-2):
-            list.append(0)
 
+        for i in range(input_size):
+            list.append(1)
 
         runningindex = 0
         runningindexInv = input_size - 1
-        while k < output_size:
+        while k > output_size:
             print(runningindex)
             print(runningindexInv)
             if runningindex >= runningindexInv:
@@ -242,7 +381,7 @@ class PermutationClosedLayer(nn.Module):
         newlist = [x for x in list if x > 0]
         return newlist, int(k)
 
-    def pcs_generation(self, input_size: int, output_size: int, channels_in: int, channels_out: int,find_max_pcs: bool) -> None:
+    def pcs_generation(self, input_size: int, output_size: int, channels_in: int, channels_out: int, pooling_function:str, find_max_pcs: bool) -> None:
         # Current idea here is: More different weights = more expressiveness = better. Might need to ask about that
         # We therefore stack a bunch of PCS with 2 different weights on top of each other. 2 weights per PCS means the PCS will always be input_size in size
         # Several PCS with 2 different weights each should be better than one gigantic PCS with 3 different weights
@@ -252,7 +391,7 @@ class PermutationClosedLayer(nn.Module):
         if not find_max_pcs:
             PCSamount = output_size/input_size
             for i in range(int(PCSamount)):
-                self.PCSList.append(PermutationClosedStructure(2, channels_in, channels_out, [1,input_size - 1]))
+                self.PCSList.append(PermutationClosedStructure(2, channels_in, channels_out,pooling_function, [1,input_size - 1]))
 
             difference = output_size - int(PCSamount) * input_size
             if difference > 0:

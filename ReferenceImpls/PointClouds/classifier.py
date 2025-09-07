@@ -182,9 +182,9 @@ class DPCS(nn.Module):
     self.d_dim = d_dim
     self.x_dim = x_dim
     self.sample_size = sample_size
-    layer1 = PermutationClosedLayer(sample_size, (2*sample_size)+5, self.x_dim, self.d_dim, pool, None, False)
-    layer2 = PermutationClosedLayer(2*sample_size+5, 4*sample_size+5, self.d_dim, self.d_dim,pool, layer1, False)
-    layer3 = PermutationClosedLayer(4*sample_size+5, sample_size, self.d_dim, self.d_dim, pool, layer2, False)
+    layer1 = PermutationClosedLayer(sample_size, (2*sample_size)+1, self.x_dim, self.d_dim, None, False)
+    layer2 = PermutationClosedLayer(2*sample_size+1, 4*sample_size+3, self.d_dim, self.d_dim, layer1, False)
+    layer3 = PermutationClosedLayer(4*sample_size+3, sample_size, self.d_dim, self.d_dim, layer2, False)
     self.phi = nn.Sequential(
       layer1,
       nn.ELU(inplace=True),
@@ -243,10 +243,10 @@ class DPCSTanh(nn.Module):
     super(DPCSTanh, self).__init__()
     self.d_dim = d_dim
     self.x_dim = x_dim
-    layer1 = PermutationClosedLayer(sample_size, (4 * sample_size), self.x_dim, self.d_dim, pool, None, False)
-    layer2 = PermutationClosedLayer(4 * sample_size, 8 * sample_size, self.d_dim, self.d_dim, pool, layer1,False)
-    layer3 = PermutationClosedLayer(8 * sample_size, sample_size, self.d_dim, self.d_dim, pool, layer2, False)
-    layer4 = PermutationClosedLayer(4*sample_size, sample_size, self.d_dim, self.d_dim, pool, layer3, False)
+    layer1 = PermutationClosedLayer(sample_size, (4 * sample_size), self.x_dim, self.d_dim, None, False)
+    layer2 = PermutationClosedLayer((4 * sample_size), (8 * sample_size), self.d_dim, self.d_dim, layer1,False)
+    layer3 = PermutationClosedLayer((8 * sample_size), (4*sample_size), self.d_dim, self.d_dim,layer2, False)
+    layer4 = PermutationClosedLayer(4*sample_size, sample_size, self.d_dim, self.d_dim, layer3, False)
     self.phi = nn.Sequential(
       layer1,
       nn.Tanh(),
@@ -254,6 +254,8 @@ class DPCSTanh(nn.Module):
       nn.Tanh(),
       layer3,
       nn.Tanh(),
+      layer4,
+      nn.Tanh()
     )
 
     self.ro = nn.Sequential(
