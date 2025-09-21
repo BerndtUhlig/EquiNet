@@ -198,40 +198,42 @@ class PermutationClosedLayer(nn.Module):
             constant_matrix = torch.vstack([x.value for x in self.constants])
             self.weights = torch.vstack((self.weights, constant_matrix))
 
-
-    def create_maximum_pcs(self, input_size:int, output_size: int):
-        list = []
-        k = math.factorial(input_size)
-
-        for i in range(input_size):
-            list.append(1)
-
+    def create_maximum_pcs(self,input_size: int, output_size: int):
+        lst = []
+        lst.append(input_size - 1)
+        lst.append(1)
+        k = input_size
+        new_k = input_size
+        for i in range(input_size - 2):
+            lst.append(0)
+        lst_cpy = lst.copy()
         runningindex = 0
-        runningindexInv = input_size - 1
-        while k > output_size:
+        runningindexInv = 1
+        while new_k < output_size:
+            k = new_k
+            lst = lst_cpy.copy()
             print(runningindex)
             print(runningindexInv)
-            if runningindex >= runningindexInv:
-                runningindex = 0
-                for index in range(len(list)):
-                    if list[index] > 0:
-                        runningindexInv = index
-
-            list[runningindex] += 1
-            list[runningindexInv] -= 1
-            print(list)
-
-            k = math.factorial(input_size)
+            lst_cpy[runningindex] -= 1
+            lst_cpy[runningindexInv] += 1
+            print(lst_cpy)
+            new_k = math.factorial(input_size)
             ksmall = 1
-            for item in list:
+            for item in lst_cpy:
                 ksmall = ksmall * math.factorial(item)
-            k = k / ksmall
-            print(k)
+            new_k = new_k / ksmall
+            print(new_k)
             runningindex += 1
-            runningindexInv -= 1
-            if list[0] == input_size - 1 and list[1] == 1:
+            if runningindex == runningindexInv:
+                runningindex = 0
+            if lst_cpy[runningindexInv] >= lst_cpy[runningindex]:
+                if lst_cpy[runningindex] < lst_cpy[runningindexInv]:
+                    runningindex = runningindexInv
+                runningindexInv += 1
+            if runningindexInv == len(lst_cpy):
+                k = new_k
                 break
-        newlist = [x for x in list if x > 0]
+        newlist = [x for x in lst if x > 0]
         return newlist, int(k)
 
     def pcs_generation(self, input_size: int, output_size: int, find_max_pcs: bool) -> None:
@@ -255,6 +257,10 @@ class PermutationClosedLayer(nn.Module):
          weights, pcs_size = self.create_maximum_pcs(input_size,output_size)
          difference = output_size - pcs_size
          self.PCSList.append(PermutationClosedStructure(len(weights), weights))
+         while difference >= output_size:
+             weights, pcs_size = self.create_maximum_pcs(input_size, output_size)
+             difference = difference - pcs_size
+             self.PCSList.append(PermutationClosedStructure(len(weights), weights))
          if difference > 0:
                 for i in range(int(difference)):
                     constant = ConstantNode(input_size)

@@ -5,7 +5,7 @@ import numpy as np
 from sympy import multinomial_coefficients
 from torch.utils.data import TensorDataset, DataLoader
 
-from EquiNetSplit import *
+from EquiNet import *
 from torch.optim import Adam
 #
 # weightTensor = torch.randn(5)
@@ -34,7 +34,7 @@ from torch.optim import Adam
 # val = PermutationClosedStructure(10, [9,1])
 # print(len(val.weightMatrix))
 # print(val.weightMatrix)
-d = 1000       # dimensionality
+d = 20      # dimensionality
 N = 1000  # samples
 
 def count_trainable(model: torch.nn.Module) -> int:
@@ -86,12 +86,8 @@ print(y)
 
 
 
-layer1 = PermutationClosedLayer(d ,2*d ,None,False)
-layer2 = PermutationClosedLayer(2*d ,d,layer1,False)
-print(count_trainable(layer1))
-print([p for p in layer1.parameters()])
-print(count_trainable(layer2))
-print([p for p in layer2.parameters()])
+layer1 = PermutationClosedLayer(d ,8*d ,None,False)
+layer2 = PermutationClosedLayer(8*d ,d,layer1,False)
 seq = nn.Sequential(layer1,layer2,nn.Softmax()).to(device)
 seq_verify = nn.Sequential(nn.Linear(d ,2*d ),nn.Linear(2*d ,d),nn.Softmax()).to(device)
 

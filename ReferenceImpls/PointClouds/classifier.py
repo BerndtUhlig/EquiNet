@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from EquiNetChannels import *
+from EquiNetChannelsPooling import *
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.autograd as autograd
@@ -243,10 +243,10 @@ class DPCSTanh(nn.Module):
     super(DPCSTanh, self).__init__()
     self.d_dim = d_dim
     self.x_dim = x_dim
-    layer1 = PermutationClosedLayer(sample_size, (4 * sample_size), self.x_dim, self.d_dim, None, False)
-    layer2 = PermutationClosedLayer((4 * sample_size), (8 * sample_size), self.d_dim, self.d_dim, layer1,False)
-    layer3 = PermutationClosedLayer((8 * sample_size), (4*sample_size), self.d_dim, self.d_dim,layer2, False)
-    layer4 = PermutationClosedLayer(4*sample_size, sample_size, self.d_dim, self.d_dim, layer3, False)
+    layer1 = PermutationClosedLayer(sample_size, (4 * sample_size), self.x_dim, self.d_dim, "mean", None, False)
+    layer2 = PermutationClosedLayer((4 * sample_size), (8 * sample_size), self.d_dim, self.d_dim, "mean", layer1,False)
+    layer3 = PermutationClosedLayer((8 * sample_size), (4*sample_size), self.d_dim, self.d_dim,"mean", layer2, False)
+    layer4 = PermutationClosedLayer(4*sample_size, sample_size, self.d_dim, self.d_dim,"mean", layer3, False)
     self.phi = nn.Sequential(
       layer1,
       nn.Tanh(),
