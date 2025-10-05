@@ -1,13 +1,12 @@
 import numpy
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from sympy.utilities.iterables import multiset_permutations
-from sympy import multinomial_coefficients
 from more_itertools import distinct_permutations
 import numpy as np
 from typing import List
 import math
-import weakref
 
 
 class ConstantNode(nn.Module):
@@ -18,9 +17,7 @@ class ConstantNode(nn.Module):
         self.value = nn.Parameter(torch.randn(1))
 
     def forward(self,x):
-        matrix = torch.full((self.size,1),self.value.item())
-        result = x @ matrix
-        return result
+        return torch.full((self.size,),self.value.item()) @ x
 
 
 class PermutationClosedStructure(nn.Module):
@@ -42,11 +39,29 @@ class PermutationClosedStructure(nn.Module):
             tuples = list(distinct_permutations(new_tensor_data))
             val = [list(data) for data in tuples]
             self.indices = torch.tensor(val)
+            # matrixSplits = [
+            # [[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in range(self.indices.size(0))] for k in
+            # range(self.k)
+            # ]
+            # self.weightIndicesSplits = [torch.tensor(x) for x in matrixSplits]
 
     def forward(self,x):
-        matrix = (self.weightParameter[self.indices]).T
-        result =x @ matrix
-        return result
+        S = torch.einsum('bd,rdk->brk', x, self.mask)
+
+        # STEP B – multiply each group by its learnable scalar
+        weighted = S * self.weight  # (B, rows, k)
+
+        # STEP C – add the k groups → same shape as old `result`
+        out = weighted.sum(2)  # (B, rows)
+        return out
+        #
+        # check = (x[:,self.weightIndicesSplits[0]])
+        # result = (self.weightParameter[0] * torch.sum(check, dim=2))
+        # for i in range(1, self.k):
+        #     check2 =   x[:,self.weightIndicesSplits[i]]
+        #     result += self.weightParameter[i] * torch.sum(check2,dim=2)
+        # final = result
+        # return final
 
 
 
@@ -73,10 +88,32 @@ class PermutationClosedStructureInverse(nn.Module):
         self.k = len(reference)
         weight_vals = torch.randn(self.k)
         self.weightParameter = nn.Parameter(weight_vals).to(torch.float32)
-        print(sum(p.numel() for p in self.parameters() if p.requires_grad))
+        mask = F.one_hot(running_weight_matrix, num_classes=self.k).float()
+        self.register_buffer("mask", mask)
+        # matrixSplits = [
+        #     [[i for i in range(self.indices.size(1)) if self.indices[j][i] == k] for j in range(self.indices.size(0))]
+        #     for k in
+        #     range(self.k)
+        # ]
+        # self.weightIndicesSplits = [torch.tensor(x) for x in matrixSplits]
 
     def forward(self,x):
-        return x @ (self.weightParameter[self.indices]).T
+        S = torch.einsum('bd,rdk->brk', x, self.mask)
+
+        # STEP B – multiply each group by its learnable scalar
+        weighted = S * self.weight  # (B, rows, k)
+
+        # STEP C – add the k groups → same shape as old `result`
+        out = weighted.sum(2)  # (B, rows)
+        return out
+
+        # check = (x[:, self.weightIndicesSplits[0]])
+        # result = (self.weightParameter[0] * torch.sum(check, dim=2))
+        # for i in range(1, self.k):
+        #     check2 = x[:, self.weightIndicesSplits[i]]
+        #     result += self.weightParameter[i] * torch.sum(check2, dim=2)
+        # final = result
+        # return final
 
 
 
@@ -88,7 +125,7 @@ class PermutationClosedLayer(nn.Module):
         self.constants = nn.ModuleList()
         self.input_size = input_size
         self.output_size = output_size
-        self.predecessor = weakref.ref(predecessor) if predecessor is not None else None
+        self.predecessor = predecessor
         print("LAYER GENERATION STARTED")
         if input_size <= output_size:
             print("GENERATING PCS SMALL TO BIG")
@@ -148,7 +185,7 @@ class PermutationClosedLayer(nn.Module):
         values = torch.hstack([pcs(x) for pcs in self.PCSList])
         if len(self.constants) > 0:
             constant_matrix = torch.hstack([const(x) for const in self.constants])
-            values = torch.hstack((values, constant_matrix))
+            values = torch.vstack((values, constant_matrix))
         return values
 
     # 5!  > 5!/2! * 2! * 1! > 5!/3!*1!*1! > 5!/4! * 1!
@@ -161,7 +198,7 @@ class PermutationClosedLayer(nn.Module):
             constant_matrix = torch.vstack([x.value for x in self.constants])
             self.weights = torch.vstack((self.weights, constant_matrix))
 
-    def create_maximum_pcs(self,input_size: int, output_size: int, max_k: int = 3):
+    def create_maximum_pcs(self,input_size: int, output_size: int):
         lst = []
         lst.append(input_size - 1)
         lst.append(1)
@@ -204,6 +241,7 @@ class PermutationClosedLayer(nn.Module):
         # We therefore stack a bunch of PCS with 2 different weights on top of each other. 2 weights per PCS means the PCS will always be input_size in size
         # Several PCS with 2 different weights each should be better than one gigantic PCS with 3 different weights
 
+        # find maxPCS fit (do this later)
 
         if not find_max_pcs:
             PCSamount = output_size/input_size
