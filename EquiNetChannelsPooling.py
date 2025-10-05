@@ -45,7 +45,8 @@ class PermutationClosedStructure(nn.Module):
                 new_tensor_data.append(i)
         tuples = list(distinct_permutations(new_tensor_data))
         val = [list(data) for data in tuples]
-        self.indices = torch.tensor(val)
+        indices = torch.tensor(val)
+        self.register_buffer('indices', indices)
 
         # self.pooling_function = pooling_function
         # weightTensor = torch.randn(k, channels_out, channels_in)
@@ -74,7 +75,7 @@ class PermutationClosedStructure(nn.Module):
 
 
     def forward(self,x):
-        samples, size, channels = x.shape
+        samples, size, _ = x.shape
         rows, D = self.indices.shape
 
         if self.pooling_function == "mean":
@@ -210,19 +211,21 @@ class PermutationClosedStructureInverse(nn.Module):
                     self.constants.append(ConstantNode(channels_in,channels_out,1))
 
         sum = 0
+        indices = []
         for i in range(len(self.PCSList)):
             if i == 0:
-                self.indices = self.PCSList[i].indices.T
+                indices = self.PCSList[i].indices.T
             else:
                 sum += self.PCSList[i].k
                 pcsindex = self.PCSList[i].indices.T
-                self.indices = torch.hstack([self.indices, pcsindex + torch.full(pcsindex.size(), sum)])
+                indices = torch.hstack([indices, pcsindex + torch.full(pcsindex.size(), sum)])
 
         if len(self.constants) > 0:
             for i in range(len(self.constants)):
                 sum += 1
                 constindex = torch.full((rows,1), sum)
-                self.indices = torch.hstack([self.indices, constindex])
+                indices = torch.hstack([indices, constindex])
+        self.register_buffer("indices",indices)
         #
         #
         # # This may be rather poor in performance => Potential for using "pseudo inverse"
@@ -250,16 +253,15 @@ class PermutationClosedStructureInverse(nn.Module):
     def forward(self,x):
         samples, points, channels = x.shape
         rows, columns = self.indices.shape
+        result = torch.zeros((samples,rows,self.channels_out), device=x.device)
         bigChunks = torch.split(x,[len(self.PCSList)*rows,len(self.constants)],dim=1)
         chunkPCS = torch.chunk(bigChunks[0], len(self.PCSList), dim=1)
-        result = torch.zeros((samples,rows,self.channels_out), device=x.device)
         for i in range(len(self.PCSList)):
             result += self.PCSList[i](chunkPCS[i])
-        if len(bigChunks[1][1]) > 0:
+        if len(self.constants) > 0:
             chunkConstants = torch.chunk(bigChunks[1], len(self.constants), dim=1)
             for k in range(len(self.constants)):
                 result += self.constants[k](chunkConstants[k])
-        final = result
         return result
 
 

@@ -33,6 +33,14 @@ x = torch.randn(20,10,3)
 # B = 20
 k = 4
 weight = torch.randn(k,3,3)
+
+
+a = torch.rand(10)
+b = torch.rand(10)
+c = (a == b)
+
+d = a.argmax(dim=0)
+
 #x_normal = torch.randn(20,10)
 # # indices : (rows, D) with values in 0..k-1
 # indices_exp = indices.expand(B, -1, -1)                   # (B, rows, D)

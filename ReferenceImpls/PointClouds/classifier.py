@@ -8,7 +8,10 @@ import torch.autograd as autograd
 import h5py
 import pdb
 from tqdm import tqdm, trange
-
+# PCS_100 w dropout 0.1
+# DeepSets100 dropout 0.5 => 0.841
+# DeepSets1000 droput 0.5 => 0.875
+# PCS 1000 dropout 0.3 => 0.854
 class PermEqui1_max(nn.Module):
   def __init__(self, in_dim, out_dim):
     super(PermEqui1_max, self).__init__()
@@ -243,10 +246,9 @@ class DPCSTanh(nn.Module):
     super(DPCSTanh, self).__init__()
     self.d_dim = d_dim
     self.x_dim = x_dim
-    layer1 = PermutationClosedLayer(sample_size, (4 * sample_size), self.x_dim, self.d_dim, "mean", None, False)
-    layer2 = PermutationClosedLayer((4 * sample_size), (8 * sample_size), self.d_dim, self.d_dim, "mean", layer1,False)
-    layer3 = PermutationClosedLayer((8 * sample_size), (4*sample_size), self.d_dim, self.d_dim,"mean", layer2, False)
-    layer4 = PermutationClosedLayer(4*sample_size, sample_size, self.d_dim, self.d_dim,"mean", layer3, False)
+    layer1 = PermutationClosedLayer(sample_size, 4*(sample_size), self.x_dim, self.d_dim, pool, None, False)
+    layer2 = PermutationClosedLayer(4*(sample_size), 8*(sample_size), self.d_dim, self.d_dim, pool, layer1,False)
+    layer3 = PermutationClosedLayer(8*(sample_size), (sample_size), self.d_dim, self.d_dim, pool, layer2, False)
     self.phi = nn.Sequential(
       layer1,
       nn.Tanh(),
@@ -254,15 +256,13 @@ class DPCSTanh(nn.Module):
       nn.Tanh(),
       layer3,
       nn.Tanh(),
-      layer4,
-      nn.Tanh()
     )
 
     self.ro = nn.Sequential(
-       nn.Dropout(p=0.5),
+       nn.Dropout(p=0.3),
        nn.Linear(self.d_dim, self.d_dim),
        nn.Tanh(),
-       nn.Dropout(p=0.5),
+       nn.Dropout(p=0.3),
        nn.Linear(self.d_dim, 40),
     )
     print(self)
