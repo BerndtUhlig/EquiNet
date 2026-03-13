@@ -1,4 +1,5 @@
 import torch
+from more_itertools import distinct_permutations
 from sympy.utilities.iterables import multiset_permutations
 import numpy as np
 import torch.nn.functional as F
@@ -126,44 +127,47 @@ d = a.argmax(dim=0)
 # # result = torch.sum(result, dim=1)
 # # print(result.flatten())
 # # print(checkResult)
-C_out = 3
-B, N, Cin = x.shape
-_, P = indices.shape
-y = x.new_zeros(B, P, C_out)
+# C_out = 3
+# B, N, Cin = x.shape
+# _, P = indices.shape
+# y = x.new_zeros(B, P, C_out)
+#
+# M = torch.stack([(indices == a).float() for a in range(k)], 0)
+#
+#
+# # Stream over N; only keep (B, K, C_out) for that i
+#
+# B, N, Cin = x.shape
+# P = indices.size(0)
+#
+# y = x.new_zeros(B, P, C_out)
+# for k in range(weight.size(0)):
+#     # (B,N,Cout)
+#     weightCase =weight[k].T
+#     T_k = x @ weightCase
+#     # route N->P: (B,N,Cout) × (N,P) -> (B,P,Cout)
+#     mk = M[k]
+#     sol = torch.einsum('bnc,pn->bpc', T_k, mk)
+#     y += sol
+#
+# print(y)
+#
+# x[0], x[1] = x[1].clone(), x[0].clone()
+#
+# B, N, Cin = x.shape
+# P = indices.size(0)
+#
+# y = x.new_zeros(B, P, C_out)
+# for k in range(weight.size(0)):
+#     # (B,N,Cout)
+#     weightCase =weight[k].T
+#     T_k = x @ weightCase
+#     # route N->P: (B,N,Cout) × (N,P) -> (B,P,Cout)
+#     mk = M[k]
+#     sol = torch.einsum('bnc,pn->bpc', T_k, mk)
+#     y += sol
 
-M = torch.stack([(indices == a).float() for a in range(k)], 0)
-
-
-# Stream over N; only keep (B, K, C_out) for that i
-
-B, N, Cin = x.shape
-P = indices.size(0)
-
-y = x.new_zeros(B, P, C_out)
-for k in range(weight.size(0)):
-    # (B,N,Cout)
-    weightCase =weight[k].T
-    T_k = x @ weightCase
-    # route N->P: (B,N,Cout) × (N,P) -> (B,P,Cout)
-    mk = M[k]
-    sol = torch.einsum('bnc,pn->bpc', T_k, mk)
-    y += sol
-
-print(y)
-
-x[0], x[1] = x[1].clone(), x[0].clone()
-
-B, N, Cin = x.shape
-P = indices.size(0)
-
-y = x.new_zeros(B, P, C_out)
-for k in range(weight.size(0)):
-    # (B,N,Cout)
-    weightCase =weight[k].T
-    T_k = x @ weightCase
-    # route N->P: (B,N,Cout) × (N,P) -> (B,P,Cout)
-    mk = M[k]
-    sol = torch.einsum('bnc,pn->bpc', T_k, mk)
-    y += sol
-
-print(y)
+# print(y)
+perm = distinct_permutations([4,4,4,5,5,5])
+for p in perm:
+    print(p)

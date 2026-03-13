@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import EquiNetChannelsPooling
 
+
 class PermEqui2_max(nn.Module):
   def __init__(self, in_dim, out_dim):
     super(PermEqui2_max, self).__init__()
@@ -61,3 +62,67 @@ class DeepSetsModel(torch.nn.Module):
         phi_output = self.network(x)
         samples, set_size, channels = phi_output.shape
         return torch.Tensor.view(phi_output,(samples,set_size))
+
+class PermutationEquivariantModelBank(torch.nn.Module):
+    def __init__(self, set_size: int, channels_in: int, channels_out: int):
+        super(PermutationEquivariantModelBank, self).__init__()
+        self.set_size = set_size
+        self.channels_in = channels_in
+        self.channels_out = channels_out
+        layer1 = EquiNetChannelsPooling.PermutationClosedLayer(set_size, set_size * 2, channels_in, channels_out,
+                                                               "max", None, False)
+        layer2 = EquiNetChannelsPooling.PermutationClosedLayer(set_size * 2, set_size * 4, channels_out,
+                                                               channels_out, "max", layer1, False)
+        layer3 = EquiNetChannelsPooling.PermutationClosedLayer(set_size * 4, set_size * 8, channels_out,
+                                                               channels_out, "max", layer2, False)
+        layer4 = EquiNetChannelsPooling.PermutationClosedLayer(set_size * 8, set_size*4, channels_out, channels_out, "max",
+                                                               layer3, False)
+        layer5 = EquiNetChannelsPooling.PermutationClosedLayer(set_size * 4, set_size*2, channels_out, channels_out, "max",
+                                                               layer4, False)
+        layer6 = EquiNetChannelsPooling.PermutationClosedLayer(set_size * 2, set_size, channels_out, 1, "max",
+                                                               layer5, False)
+        self.network = nn.Sequential(
+            layer1,
+            nn.SiLU(),
+            layer2,
+            nn.SiLU(),
+            layer3,
+            nn.SiLU(),
+            layer4,
+            nn.SiLU(),
+            layer5,
+            nn.SiLU(),
+            layer6
+        )
+
+    def forward(self, x):
+        phi_output = self.network(x)
+        samples, set_size, channels = phi_output.shape
+        return torch.Tensor.view(phi_output, (samples, set_size))
+
+class DeepSetsModelBank(torch.nn.Module):
+    def __init__(self, channels_in: int, channels_out: int):
+        super(DeepSetsModelBank, self).__init__()
+        self.x_dim = channels_in
+        self.d_dim = channels_out
+        self.network = nn.Sequential(
+            PermEqui2_max(self.x_dim, self.d_dim),
+            nn.SiLU(),
+            PermEqui2_max(self.d_dim, self.d_dim),
+            nn.SiLU(),
+            PermEqui2_max(self.d_dim, self.d_dim),
+            nn.SiLU(),
+            PermEqui2_max(self.d_dim,  self.d_dim),
+            nn.SiLU(),
+            PermEqui2_max(self.d_dim,  self.d_dim),
+            nn.SiLU(),
+            PermEqui2_max(self.d_dim,  1),
+        )
+
+    def forward(self, x):
+        phi_output = self.network(x)
+        samples, set_size, channels = phi_output.shape
+        return torch.Tensor.view(phi_output, (samples, set_size))
+
+
+
